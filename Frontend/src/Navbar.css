@@ -1,0 +1,88 @@
+
+.Navbar{
+  position: fixed;
+  top: 0;
+  margin-top: 10px ;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  background-color: transparent;
+  background: transparent;
+  /* pointer-events: none; */
+  align-items: center;
+  z-index: 9999;
+  /* width: 70px; */
+}
+.Navbar h1{
+    margin: 0;
+  font-family: 'Title Font';
+  margin-right: 100px;
+  margin-left: 20px;
+  color: rgb(160, 160, 160);
+}
+
+#share-button{
+  position: relative;
+   font-family: "Poppins Font_medium";
+  font-size: 1rem;
+  background-color: rgba(0, 41, 48, 0.233);
+  border: 1px solid white;
+  color: white;
+  width: 100px;
+  border-radius: 10px;
+  height: 40px;
+  overflow: hidden;
+  margin-right: 20px;
+  z-index: 1;
+  letter-spacing: 2px;
+}
+#share-button::before{
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: white;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .4s ease;
+  z-index: -1;
+}
+#share-button:hover::before{
+  transform: scaleX(1);
+}
+#share-button:hover{
+  color: black;
+
+}
+#login-button{
+  position: relative;
+   font-family: "Poppins Font_medium";
+  font-size: 1rem;
+  background-color: rgba(0, 41, 48, 0.233);
+  border: 1px solid white;
+  color: white;
+  width: 100px;
+  border-radius: 10px;
+  height: 40px;
+  overflow: hidden;
+  margin-right: 20px;
+  z-index: 1;
+  letter-spacing: 2px;
+}
+#login-button::before{
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: white;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .4s ease;
+  z-index: -1;
+}
+#login-button:hover::before{
+  transform: scaleX(1);
+}
+#login-button:hover{
+  color: black;
+
+}

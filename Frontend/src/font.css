@@ -1,0 +1,60 @@
+@font-face {
+    font-family: "Title Font";
+    src: url('assets/Font/Titlefont.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Paragraph Font";
+    src: url('assets/Font/Paragraphfont.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Navbar Font";
+    src: url('assets/Font/NavbarFont.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Navbar Font2";
+    src: url('assets/Font/NavbarFont2.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Poppins Font";
+    src: url('assets/Font/PoppinsFont.ttf') format('opentype');
+  }
+@font-face {
+    font-family: "Poppins Font_light";
+    src: url('assets/Font/PoppinsFont_light.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+  
+@font-face {
+    font-family: "Poppins Font_extrabold";
+    src: url('assets/Font/poppins_extrabold.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+  
+@font-face {
+    font-family: "Poppins Font_Medium";
+    src: url('assets/Font/poppins_medium.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Poppins Font_regular";
+    src: url('assets/Font/poppins_regular.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
+@font-face {
+    font-family: "Poppins Font_regular_italic";
+    src: url('assets/Font/poppins_regular_italic.ttf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+  }
