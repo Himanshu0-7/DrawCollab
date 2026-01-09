@@ -2,12 +2,11 @@ import { useRef, useState, Fragment, useEffect } from "react";
 import { Stage, Layer, Rect, Transformer } from "react-konva";
 import RenderShape from "./RenderShape";
 import Konva from "konva";
-import { shapes } from "konva/lib/Shape";
 
-const Canvas = ({ ActiveTool }) => {
+const Canvas = ({ ActiveTool, setActiveTool }) => {
   const [Shapes, setShapes] = useState([]);
-  // const [pendingid, setPendingid] = useState(null)
-  const pendingidRef = useRef(null);
+  const [PreveiwShapes, setPreviewShapes] = useState([]);
+  const [pendingid, setPendingid] = useState([]);
   const previewNodeRef = useRef(null);
   const layerRef = useRef(null);
   const [isPreview, setIsPreview] = useState(false);
@@ -15,25 +14,26 @@ const Canvas = ({ ActiveTool }) => {
   const shapeRef = useRef({});
   const trRef = useRef(null);
   const isDrawing = useRef(false);
+  const is = useRef(true);
   const isShiftPressed = useRef(false);
   const lastPos = useRef(null);
   const ActiveToolRef = useRef(null);
   useEffect(() => {
-    const id = pendingidRef.current;
-    if (!id) return;
+    if (pendingid.length === 0) return;
 
-    const node = shapeRef.current[id];
-    if (!node) return; 
-
-    trRef.current.nodes([node]);
+    const node = pendingid.map((id) => shapeRef.current[id]);
+    if (node.length == 0) return;
+    trRef.current.nodes(node);
     trRef.current.getLayer().batchDraw();
 
-    pendingidRef.current = null; // consume
-  }, [Shapes]);
+    console.log(pendingid);
+    setPendingid([]);
+  }, [pendingid]);
 
   useEffect(() => {
     ActiveToolRef.current = ActiveTool;
   }, [ActiveTool]);
+
   useEffect(() => {
     const down = (e) => {
       if (e.key === "Shift") {
@@ -69,8 +69,7 @@ const Canvas = ({ ActiveTool }) => {
     if (!node) return;
 
     trRef.current.nodes([node]);
-    trRef.current.getLayer().batchDraw(); // 🔑 REQUIRED
-    console.log("selected:", trRef.current.nodes());
+    trRef.current.getLayer().batchDraw();
   };
 
   const handleUpdateShape = () => {
@@ -88,19 +87,21 @@ const Canvas = ({ ActiveTool }) => {
     }
   };
   const handleMouseDown = (e) => {
-    if (ActiveTool == "") return;
     const stage = e.target.getStage();
-    const point = stage.getPointerPosition();
     const clickedOnEmpty = e.target === stage;
     if (clickedOnEmpty) {
       trRef.current.nodes([]);
       trRef.current.getLayer().batchDraw();
     }
+    if (ActiveTool == "") return;
+    const point = stage.getPointerPosition();
     startPos.current = { x: point.x, y: point.y };
     isDrawing.current = true;
+    const id = crypto.randomUUID();
     switch (ActiveTool) {
       case "rect":
         previewNodeRef.current = new Konva.Rect({
+          id,
           x: point.x,
           y: point.y,
           width: 0,
@@ -109,9 +110,19 @@ const Canvas = ({ ActiveTool }) => {
           listening: false,
         });
         break;
+      case "selection":
+        previewNodeRef.current = new Konva.Rect({
+          x: point.x,
+          y: point.y,
+          width: 0,
+          height: 0,
+          stroke: "lightblue",
+          listening: false,
+        });
+        break;
       case "elipse":
         previewNodeRef.current = new Konva.Ellipse({
-          id: crypto.randomUUID(),
+          id,
           type: "elipse",
           x: point.x,
           y: point.y,
@@ -124,7 +135,7 @@ const Canvas = ({ ActiveTool }) => {
 
       case "arrow":
         previewNodeRef.current = new Konva.Arrow({
-          id: crypto.randomUUID(),
+          id,
           type: "arrow",
           points: [point.x, point.y, point.x, point.y],
           listening: false,
@@ -132,6 +143,7 @@ const Canvas = ({ ActiveTool }) => {
         });
         break;
     }
+
     layerRef.current.add(previewNodeRef.current);
     layerRef.current.batchDraw();
 
@@ -148,6 +160,9 @@ const Canvas = ({ ActiveTool }) => {
     lastPos.current = pos;
     switch (ActiveTool) {
       case "rect":
+        handleRect(pos, startX, startY);
+        break;
+      case "selection":
         handleRect(pos, startX, startY);
         break;
       case "elipse":
@@ -170,6 +185,7 @@ const Canvas = ({ ActiveTool }) => {
       height: Math.abs(pos.y - startY),
     });
   };
+
   const handleElipse = (pos, startX, startY) => {
     if (!previewNodeRef.current) return;
     const dx = pos.x - startX;
@@ -198,33 +214,50 @@ const Canvas = ({ ActiveTool }) => {
   const handleMouseUp = () => {
     if (!isDrawing.current || !previewNodeRef.current || ActiveTool == "")
       return;
-    const attrs = previewNodeRef.current.getAttrs();
-    const id = crypto.randomUUID();
+    if (ActiveTool === "selection") {
+      const selectionBox = previewNodeRef.current;
+      const box = selectionBox.getClientRect();
+      const selectedNodes = layerRef.current
+        .find(".shape") // 👈 IMPORTANT
+        .filter((node) =>
+          Konva.Util.haveIntersection(box, node.getClientRect())
+        );
 
+      setPendingid(selectedNodes.map((n) => n.id()));
+
+      selectionBox.destroy();
+      previewNodeRef.current = null;
+
+      isDrawing.current = false;
+      setActiveTool("selection");
+      return;
+    }
+
+    const attrs = previewNodeRef.current.getAttrs();
     setShapes((prev) => [
       ...prev,
       {
         ...attrs,
-        id,
         type: ActiveTool,
         draggable: true,
         listening: true,
       },
     ]);
-    pendingidRef.current = id;
+    setPendingid([attrs.id]);
+    isDrawing.current = false;
     previewNodeRef.current.destroy();
     previewNodeRef.current = null;
     setIsPreview(false);
-    isDrawing.current = false;
+    setActiveTool("selection");
   };
 
   return (
     <Stage
       width={window.innerWidth}
       height={window.innerHeight}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handleMouseDown}
+      onPointerMove={handleMouseMove}
+      onPointerUp={handleMouseUp}
     >
       <Layer ref={layerRef}>
         {Shapes.map((shape) => {

@@ -5,7 +5,7 @@ import Canvas from "./Canvas";
 
 const Home = () => {
   const [isshare, setIshare] = useState(0);
-  const [ActiveTool, setActiveTool] = useState('');
+  const [ActiveTool, setActiveTool] = useState("");
 
   const shareBtn = () => {
     setIshare((prev) => (prev === 0 ? 1 : 0));
@@ -18,7 +18,7 @@ const Home = () => {
         setActiveTool={setActiveTool}
         ActiveTool={ActiveTool}
       ></Navbar>
-      <Canvas ActiveTool={ActiveTool}></Canvas>
+      <Canvas ActiveTool={ActiveTool} setActiveTool={setActiveTool}></Canvas>
       <Session isloading={isshare}></Session>
     </>
   );

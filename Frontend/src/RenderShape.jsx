@@ -7,6 +7,7 @@ const RenderShape = ({ shape, RegisterRef, isPreview, transformerRef }) => {
       return (
         <Rect
           {...shape}
+          name="shape"
           ref={(node) => {
             RegisterRef(shape.id, node);
           }}
@@ -22,6 +23,7 @@ const RenderShape = ({ shape, RegisterRef, isPreview, transformerRef }) => {
       return (
         <Ellipse
           {...shape}
+          name="shape"
           ref={(node) => RegisterRef(shape.id, node)}
           onClick={() => {
             transformerRef(shape.id);
@@ -35,6 +37,7 @@ const RenderShape = ({ shape, RegisterRef, isPreview, transformerRef }) => {
       return (
         <Arrow
           {...shape}
+          name="shape"
           ref={(node) => RegisterRef(shape.id, node)}
           onClick={() => {
             transformerRef(shape.id);
