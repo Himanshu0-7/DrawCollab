@@ -4,7 +4,12 @@ import RenderShape from "./RenderShape";
 import Konva from "konva";
 import { shapes } from "konva/lib/Shape";
 
-const Canvas = ({ ActiveTool, setActiveTool, setPointerEvent }) => {
+const Canvas = ({
+  ActiveTool,
+  setActiveTool,
+  setPointerEvent,
+  setIsEraserEnable,
+}) => {
   const [Shapes, setShapes] = useState([]);
   const [pendingid, setPendingid] = useState([]);
   const previewNodeRef = useRef(null);
@@ -132,6 +137,7 @@ const Canvas = ({ ActiveTool, setActiveTool, setPointerEvent }) => {
     startPos.current = { x: point.x, y: point.y };
     if (ActiveTool === "eraser") {
       isDrawing.current = true;
+      setIsEraserEnable(true);
       isErasingRef.current = true;
       erasedIdsRef.current.clear();
 
@@ -139,7 +145,6 @@ const Canvas = ({ ActiveTool, setActiveTool, setPointerEvent }) => {
         x: point.x,
         y: point.y,
         radius: 5,
-        fill: 'black',
         listening: false,
       });
 
@@ -205,7 +210,6 @@ const Canvas = ({ ActiveTool, setActiveTool, setPointerEvent }) => {
           listening: false,
         });
         break;
-    
     }
 
     layerRef.current.add(previewNodeRef.current);
@@ -326,6 +330,7 @@ const Canvas = ({ ActiveTool, setActiveTool, setPointerEvent }) => {
       selectionBox.visible(false);
 
       isDrawing.current = false;
+      setIsEraserEnable(false);
       setPointerEvent("");
       return;
     }
