@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import Cursor from "./Cursor";
 
 export default function Room() {
-  const { roomId } = useParams();
   const [cursors, setCursors] = useState([]);
   const wsRef = useRef(null);
   useEffect(() => {

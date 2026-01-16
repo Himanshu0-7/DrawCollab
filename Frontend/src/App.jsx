@@ -1,8 +1,7 @@
-
 import Home from "./Home";
 import { Route, Routes } from "react-router-dom";
 import Room from "./Room";
-import'./Shared.css'
+import "./Shared.css";
 import { useState } from "react";
 function App() {
   // const send = () => {
@@ -18,15 +17,11 @@ function App() {
   //   document.getElementById("message").value = "";
   //   settext("");
   // };
-  
   return (
     <>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route
-          path="/room/:roomId"
-          element={<Room/>}
-        />
+        <Route path="/room/:roomId" element={<Room />} />
       </Routes>
     </>
   );
