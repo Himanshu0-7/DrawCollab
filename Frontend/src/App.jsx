@@ -10,7 +10,7 @@ function App() {
   const [isEraserEnable, setIsEraserEnable] = useState(false);
   const [pointerEvent, setPointerEvent] = useState("");
   const [roomInfo, setRoomInfo] = useState(null);
-
+  const encryptionKey = useRef(null);
   const shareBtn = () => {
     setIshare((prev) => (prev === 0 ? 1 : 0));
   };
@@ -18,23 +18,30 @@ function App() {
   useEffect(() => {
     const parseHash = () => {
       const hash = window.location.hash;
+
       if (!hash.startsWith("#room=")) {
         setRoomInfo(null);
         return;
       }
+
       const [, value] = hash.split("#room=");
       const [roomId, key] = value.split(",");
+
       if (!roomId || !key) {
         setRoomInfo(null);
         return;
       }
+
       setRoomInfo({ roomId, key });
     };
+
+    parseHash(); // 👈 run once on mount
     window.addEventListener("hashchange", parseHash);
+
     return () => {
       window.removeEventListener("hashchange", parseHash);
     };
-  });
+  }, []); // ✅ VERY IMPORTANT
 
   return (
     <>
@@ -51,8 +58,13 @@ function App() {
         setPointerEvent={setPointerEvent}
         setIsEraserEnable={setIsEraserEnable}
         roomInfo={roomInfo}
+        encryptionKey={encryptionKey}
       ></Canvas>
-      <Session isloading={isshare} roomInfo={roomInfo}></Session>
+      <Session
+        isloading={isshare}
+        roomInfo={roomInfo}
+        encryptionKey={encryptionKey}
+      ></Session>
     </>
   );
 }

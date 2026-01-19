@@ -100,7 +100,7 @@
   border: 1px solid black;
   color: black;
 }
-.create-session {
+.start-session {
   position: relative;
   font-family: "Poppins Font_medium";
   width: 150px;
@@ -115,7 +115,7 @@
   overflow: hidden;
   z-index: 1;
 }
-.create-session::before {
+.start-session::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -125,14 +125,14 @@
   transition: transform 0.4s ease;
   z-index: -1;
 }
-.create-session:hover::before {
+.start-session:hover::before {
   transform: scaleX(1);
 }
-.create-session:hover {
+.start-session:hover {
   border: 1px solid black;
   color: black;
 }
-.remove-session {
+.stop-session {
   position: relative;
   font-family: "Poppins Font_medium";
   width: 150px;
@@ -147,7 +147,7 @@
   overflow: hidden;
   z-index: 1;
 }
-.remove-session::before {
+.stop-session::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -157,10 +157,10 @@
   transition: transform 0.4s ease;
   z-index: -1;
 }
-.remove-session:hover::before {
+.stop-session:hover::before {
   transform: scaleX(1);
 }
-.remove-session:hover {
+.stop-session:hover {
   border: 1px solid black;
   color: rgb(255, 85, 85);
 }
