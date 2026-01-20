@@ -1,64 +1,228 @@
-import { useRef, useState, Fragment, useEffect, version } from "react";
-import { Stage, Layer, Rect, Transformer, Shape } from "react-konva";
+import { useRef, useState, Fragment, useEffect } from "react";
+import { Stage, Layer, Rect, Transformer } from "react-konva";
 import RenderShape from "./RenderShape";
 import Konva from "konva";
+
 const Canvas = ({
   ActiveTool,
   setActiveTool,
   setPointerEvent,
   setIsEraserEnable,
-  roomInfo,
-  encryptionKey,
+  encryptionKey,  // 🔐 Add this prop
+  roomId,         // 🔐 Add this prop
 }) => {
-  // ______________________________________
-  //
-  //              STATE
-  // ______________________________________
-
   const [Shapes, setShapes] = useState([]);
   const [pendingid, setPendingid] = useState([]);
   const [socket, setSocket] = useState(null);
-
-  // ______________________________________
-  //              REFS
-  // ______________________________________
-
-  const layerRef = useRef(null);
+  const [remoteCursors, setRemoteCursors] = useState(new Map());
+  
   const previewNodeRef = useRef(null);
-  const trRef = useRef(null);
-  const shapeRef = useRef({});
-  const currentDrawingIdRef = useRef(null);
-  const isShiftPressed = useRef(false);
-  const isDrawing = useRef(false);
-  const isDeletePressed = useRef(false);
-  const isErasingRef = useRef(false);
-  const lastPos = useRef(null);
-
-  const ActiveToolRef = useRef(null);
+  const layerRef = useRef(null);
   const startPos = useRef(null);
+  const shapeRef = useRef({});
+  const trRef = useRef(null);
+  const isDrawing = useRef(false);
+  const isShiftPressed = useRef(false);
+  const isDeletePressed = useRef(false);
+  const lastPos = useRef(null);
+  const ActiveToolRef = useRef(null);
+  const isErasingRef = useRef(false);
   const erasedIdsRef = useRef(new Set());
-  const [remoteCUrsors, setRemoteCursors] = useState(new Map());
 
-  /*______________________________________
-
-            useEffects
-______________________________________*/
-  const [cryptoKey, setCryptoKey] = useState(null);
-
+  // 🔐 Initialize WebSocket for real-time collaboration
   useEffect(() => {
-    if (!encryptionKey) return;
-    crypto.subtle
-      .importKey(
-        "jwk",
-        encryptionKey, // FULL JWK
-        { name: "AES-GCM" },
-        false,
-        ["encrypt", "decrypt"],
-      )
-      .then((cryptoKey) => {
-        setCryptoKey(cryptoKey);
+    if (!roomId) return;
+
+    const ws = new WebSocket(`ws://localhost:3000/ws?room=${roomId}`);
+    
+    ws.onopen = () => {
+      console.log('Connected to room:', roomId);
+    };
+    
+    ws.onmessage = async (event) => {
+      const message = JSON.parse(event.data);
+      await handleWebSocketMessage(message);
+    };
+    
+    ws.onerror = (error) => console.error('WebSocket error:', error);
+    ws.onclose = () => console.log('WebSocket closed');
+    
+    setSocket(ws);
+    
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [roomId]);
+
+  // 🔐 Handle incoming WebSocket messages
+  const handleWebSocketMessage = async (message) => {
+    switch (message.type) {
+      case 'SCENE_UPDATE':
+        await handleRemoteSceneUpdate(message.payload);
+        break;
+        
+      case 'SCENE_UPDATE_DRAWING':
+        await handleRemoteDrawingUpdate(message.payload);
+        break;
+        
+      case 'MOUSE_LOCATION':
+        handleRemoteMouseLocation(message.payload);
+        break;
+        
+      case 'USER_JOINED':
+        console.log('User joined:', message.payload.userName);
+        break;
+        
+      case 'USER_LEFT':
+        handleUserLeft(message.payload);
+        break;
+    }
+  };
+
+  // 🔐 Decrypt and merge remote scene updates
+  const handleRemoteSceneUpdate = async (payload) => {
+    if (!payload.encryptedData || !encryptionKey) return;
+    
+    try {
+      const decryptedData = await decryptData(
+        new Uint8Array(payload.encryptedData),
+        encryptionKey
+      );
+      
+      const { shapes: remoteShapes } = JSON.parse(decryptedData);
+      
+      setShapes(prevShapes => {
+        const shapeMap = new Map(prevShapes.map(s => [s.id, s]));
+        
+        remoteShapes.forEach(remoteShape => {
+          const localShape = shapeMap.get(remoteShape.id);
+          
+          if (!localShape || remoteShape.version > localShape.version) {
+            shapeMap.set(remoteShape.id, remoteShape);
+          }
+        });
+        
+        return Array.from(shapeMap.values());
       });
-  }, [encryptionKey]);
+    } catch (error) {
+      console.error('Failed to decrypt scene update:', error);
+    }
+  };
+
+  // 🔐 Handle live drawing updates (while user is still drawing)
+  const handleRemoteDrawingUpdate = async (payload) => {
+    if (!payload.encryptedData || !encryptionKey) return;
+    
+    try {
+      const decryptedData = await decryptData(
+        new Uint8Array(payload.encryptedData),
+        encryptionKey
+      );
+      
+      const { shape: remoteShape } = JSON.parse(decryptedData);
+      
+      setShapes(prevShapes => {
+        const shapeMap = new Map(prevShapes.map(s => [s.id, s]));
+        shapeMap.set(remoteShape.id, remoteShape);
+        return Array.from(shapeMap.values());
+      });
+    } catch (error) {
+      console.error('Failed to decrypt drawing update:', error);
+    }
+  };
+
+  // Handle remote cursor positions
+  const handleRemoteMouseLocation = (payload) => {
+    setRemoteCursors(prev => {
+      const next = new Map(prev);
+      next.set(payload.userId, {
+        x: payload.x,
+        y: payload.y,
+        userName: payload.userName || 'Anonymous'
+      });
+      return next;
+    });
+    
+    setTimeout(() => {
+      setRemoteCursors(prev => {
+        const next = new Map(prev);
+        next.delete(payload.userId);
+        return next;
+      });
+    }, 3000);
+  };
+
+  const handleUserLeft = (payload) => {
+    setRemoteCursors(prev => {
+      const next = new Map(prev);
+      next.delete(payload.userId);
+      return next;
+    });
+  };
+
+  // 🔐 Encryption helper
+  const encryptData = async (data, key) => {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(data);
+    
+    const encrypted = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      encoded
+    );
+    
+    const blob = new Uint8Array(iv.length + encrypted.byteLength);
+    blob.set(iv, 0);
+    blob.set(new Uint8Array(encrypted), iv.length);
+    
+    return blob;
+  };
+
+  // 🔐 Decryption helper
+  const decryptData = async (encryptedBlob, key) => {
+    const iv = encryptedBlob.slice(0, 12);
+    const data = encryptedBlob.slice(12);
+    
+    const decrypted = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      data
+    );
+    
+    return new TextDecoder().decode(decrypted);
+  };
+
+  // 🔐 Broadcast shape changes to other users
+  const broadcastShapeUpdate = async (shapes, isDrawing = false) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN || !encryptionKey) return;
+    
+    try {
+      const encryptedPayload = await encryptData(
+        JSON.stringify({ shapes }),
+        encryptionKey
+      );
+      
+      socket.send(JSON.stringify({
+        type: isDrawing ? 'SCENE_UPDATE_DRAWING' : 'SCENE_UPDATE',
+        payload: {
+          encryptedData: Array.from(encryptedPayload)
+        }
+      }));
+    } catch (error) {
+      console.error('Failed to broadcast update:', error);
+    }
+  };
+
+  // Send cursor position
+  const sendCursorPosition = (x, y) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'MOUSE_LOCATION',
+        payload: { x, y }
+      }));
+    }
+  };
+
   useEffect(() => {
     if (pendingid.length === 0) return;
 
@@ -73,180 +237,6 @@ ______________________________________*/
   useEffect(() => {
     ActiveToolRef.current = ActiveTool;
   }, [ActiveTool]);
-
-  const initialScenePayload = async () => {
-    const payload = await encryptData(JSON.stringify({ Shapes }), cryptoKey);
-    await fetch(`http://localhost:3000/api/payload?room=${roomInfo.roomId}`, {
-      method: "POST",
-      body: payload,
-    });
-
-    const ws = new WebSocket(`ws://localhost:3000/ws?room=${roomInfo.roomId}`);
-
-    ws.onopen = () => {
-      console.log("ws connected to roomid", roomInfo.roomId);
-    };
-    ws.onmessage = async (e) => {
-      const message = JSON.parse(e.data);
-      await handleWebsocketMessgae(message);
-    };
-
-    setSocket(ws);
-    return () => {
-      ws.close();
-    };
-  };
-  /*_________________________________________
-  
-  Handling Websocket          
-  __________________________________________*/
-
-  useEffect(() => {
-    if (!roomInfo || !cryptoKey) return;
-    initialScenePayload();
-  }, [roomInfo, cryptoKey]);
-
-  const handleWebsocketMessgae = async (message) => {
-    switch (message.type) {
-      case "SCENE_UPDATE":
-        await handleRemoteSceneUpdate(message.payload);
-        break;
-      case "SCENE_UPDATE_DRAWING":
-        await handleRemoteDrawingUpdate(message.payload);
-        break;
-      case "MOUSE_LOCATION":
-        handleRemoteMouseLocation(message.payload);
-        break;
-      case "USER_JOINED":
-        console.log("User Joined", message.payload);
-        break;
-      case "USER_LEFT":
-        handleUserLeft(message.payload);
-        break;
-    }
-  };
-
-  const handleRemoteSceneUpdate = async (payload) => {
-    if (!cryptoKey || !roomInfo) return;
-    try {
-      // console.log("inside Scene Update", payload.encryptedData);
-
-      // console.log(payload.encryptedData.data);
-      let arr;
-      if (payload.encryptedData.data) {
-        arr = payload.encryptedData.data
-      } else {
-        var obj = payload.encryptedData
-        arr = Object.keys(obj)
-          .sort((a, b) => Number(a) - Number(b))
-          .map(k => obj[k]);
-      }
-      console.log("inside scene update arr=", arr);
-      const decryptedData = await decryptData(
-        new Uint8Array(arr),
-        cryptoKey,
-      );
-      console.log("After Drawing");
-      const { Shapes: remoteShape } = JSON.parse(decryptedData);
-
-      setShapes((prevShapes) => {
-        const shapeMap = new Map(prevShapes.map((s) => [s.id, s]));
-        remoteShape.forEach((remoteShape) => {
-          const localShape = shapeMap.get(remoteShape.id);
-          if (!localShape || remoteShape.version > localShape.version) {
-            shapeMap.set(remoteShape.id, remoteShape);
-          }
-        });
-        return Array.from(shapeMap.values());
-      });
-    } catch (error) {
-      console.error("Failed to Decrypt Scene Update", error);
-    }
-  };
-
-  // Update handleRemoteDrawingUpdate to handle preview shapes
-  const handleRemoteDrawingUpdate = async (payload) => {
-    if (!payload.encryptedData || !cryptoKey) return;
-
-    try {
-      var obj = payload.encryptedData;
-      const arr = Object.keys(obj)
-        .sort((a, b) => Number(a) - Number(b))
-        .map(k => obj[k]);
-      const decryptedData = await decryptData(
-        new Uint8Array(arr),
-        cryptoKey,
-      );
-
-      const { Shapes: remoteShapes } = JSON.parse(decryptedData);
-
-      if (!Array.isArray(remoteShapes)) return;
-
-      setShapes((prevShapes) => {
-        const shapeMap = new Map();
-
-        // ✅ Keep all non-preview shapes
-        prevShapes.forEach((shape) => {
-          if (!shape.isPreview) {
-            shapeMap.set(shape.id, shape);
-          }
-        });
-
-        // ✅ Add/update with remote shapes (which may be previews)
-        remoteShapes.forEach((shape) => {
-          shapeMap.set(shape.id, shape);
-        });
-
-        return Array.from(shapeMap.values());
-      });
-    } catch (error) {
-      console.error("Failed to Update Drawing", error);
-    }
-  };
-
-  const sendCursorPosition = (x, y) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(
-        JSON.stringify({
-          type: "MOUSE_LOCATION",
-          payload: { x, y },
-        }),
-      );
-    }
-  };
-
-  const handleRemoteMouseLocation = (payload) => {
-    setRemoteCursors((prev) => {
-      const next = new Map(prev);
-      next.set(payload.userId, {
-        x: payload.x,
-        y: payload.y,
-        userName: payload.userName || "lund",
-      });
-      return next;
-    });
-    /* Handling Mouse Delete if inActivity for 3 second */
-    setTimeout(() => {
-      setRemoteCursors((prev) => {
-        const next = new Map(prev);
-        next.delete(payload.userId);
-        return next;
-      });
-    }, 3000);
-  };
-
-  const handleUserLeft = (payload) => {
-    setRemoteCursors((prev) => {
-      const next = new Map(prev);
-      next.delete(payload.userId);
-      return next;
-    });
-  };
-  /* ________________________________
-
-    KeyBoard Handling
-    
- _________________________________*/
 
   useEffect(() => {
     const down = (e) => {
@@ -269,6 +259,7 @@ ______________________________________*/
       window.removeEventListener("keyup", up);
     };
   }, []);
+
   useEffect(() => {
     const down = (e) => {
       if (e.key === "Delete") {
@@ -291,61 +282,6 @@ ______________________________________*/
     };
   }, []);
 
-  const encryptData = async (data) => {
-    if (!cryptoKey) return null;
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoded = new TextEncoder().encode(data);
-
-    const encryptedBuffer = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: iv },
-      cryptoKey,
-      encoded,
-    );
-    const encrypted = new Uint8Array(encryptedBuffer);
-    const blob = new Uint8Array(iv.length + encrypted.length);
-    blob.set(iv, 0);
-    blob.set(encrypted, iv.length);
-    return blob;
-  };
-  const decryptData = async (encryptedBlob, key) => {
-    // console.log(encryptedBlob)
-    const iv = encryptedBlob.slice(0, 12);
-    const data = encryptedBlob.slice(12);
-    const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: iv },
-      key,
-      data,
-    );
-    return new TextDecoder().decode(decryptedBuffer);
-  };
-  const broadCasteShapeUpdate = async (Shapes, isDrawing = false) => {
-    if (!socket || socket.readyState !== WebSocket.OPEN || !cryptoKey) return;
-    // console.log(shapes);
-    try {
-      const encryptedPayload = await encryptData(
-        JSON.stringify({ Shapes }),
-        cryptoKey,
-      );
-      socket.send(
-        JSON.stringify({
-          type: isDrawing ? "SCENE_UPDATE_DRAWING" : "SCENE_UPDATE",
-          payload: {
-            encryptedData: encryptedPayload,
-          },
-        }),
-      );
-    } catch (error) {
-      console.error("Failed to broadcast update:", error);
-    }
-  };
-
-  /*___________________________________
-
-  
-              Refs Register
-  
-  _____________________________________*/
-
   const RegisterRef = (id, node) => {
     if (node) {
       shapeRef.current[id] = node;
@@ -358,19 +294,12 @@ ______________________________________*/
     const node = shapeRef.current[id];
     if (!node) return;
 
-    // ❗ skip deleted shapes
     const shape = Shapes.find((s) => s.id === id);
     if (!shape || shape.deleted) return;
 
     trRef.current.nodes([node]);
     trRef.current.getLayer().batchDraw();
   };
-
-  /* ____________________________________________________________
-
-                      Handling Soft Delete-Shape 
-                      
-  _______________________________________________________________*/
 
   const handleDeleteShape = async () => {
     if (!trRef.current) return;
@@ -380,25 +309,20 @@ ______________________________________*/
 
     const ids = new Set(selectedNodes.map((node) => node.id()));
 
-    // ✅ SOFT DELETE (Excalidraw-style)
-    setShapes((prev) =>
-      prev.map((shape) =>
-        ids.has(shape.id)
-          ? { ...shape, deleted: true, version: (shape.version || 0) + 1 }
-          : shape,
-      ),
+    // SOFT DELETE
+    const updatedShapes = Shapes.map((shape) =>
+      ids.has(shape.id) ? { ...shape, deleted: true, version: (shape.version || 0) + 1 } : shape
     );
-    await broadCasteShapeUpdate(Shapes.filter((s) => ids.has(s.id)));
+    
+    setShapes(updatedShapes);
+
+    // 🔐 Broadcast deletion to other users
+    await broadcastShapeUpdate(updatedShapes.filter(s => ids.has(s.id)));
+
     // cleanup transformer
     trRef.current.nodes([]);
     trRef.current.getLayer()?.batchDraw();
   };
-
-  /*________________________________________________
-  
-              Handling Shape-Update While-Drawing 
-              
-  _________________________________________________*/
 
   const handleUpdateShape = () => {
     if (!lastPos.current || !startPos.current) return;
@@ -409,16 +333,10 @@ ______________________________________*/
       case "elipse":
         handleElipse(lastPos.current, startPos.current.x, startPos.current.y);
         break;
-
       case "arrow":
         break;
     }
   };
-
-  /* _____________________________________
-
-               Handling All MouseEvents 
-  ________________________________________*/
 
   const handleMouseDown = (e) => {
     const stage = e.target.getStage();
@@ -430,9 +348,6 @@ ______________________________________*/
     if (ActiveTool == "") return;
     const point = stage.getPointerPosition();
     startPos.current = { x: point.x, y: point.y };
-
-    // ✅ Generate a temporary ID for this drawing session
-    currentDrawingIdRef.current = crypto.randomUUID();
 
     if (ActiveTool === "eraser") {
       isDrawing.current = true;
@@ -489,7 +404,6 @@ ______________________________________*/
           listening: false,
         });
         break;
-
       case "arrow":
         previewNodeRef.current = new Konva.Arrow({
           type: "arrow",
@@ -517,14 +431,20 @@ ______________________________________*/
   };
 
   const handleMouseMove = async (e) => {
-    if (!isDrawing.current || ActiveTool == "" || !previewNodeRef.current)
+    if (!isDrawing.current || ActiveTool == "" || !previewNodeRef.current) {
+      // 🔐 Send cursor position even when not drawing
+      const stage = e.target.getStage();
+      const pos = stage.getPointerPosition();
+      if (pos) {
+        sendCursorPosition(pos.x, pos.y);
+      }
       return;
-
-    const stage = e.target.getStage();
-    const pos = stage.getPointerPosition();
+    }
     const startX = startPos.current.x;
     const startY = startPos.current.y;
     lastPos.current = pos;
+
+    // 🔐 Send cursor position
     sendCursorPosition(pos.x, pos.y);
 
     if (ActiveTool === "eraser" && isErasingRef.current) {
@@ -539,7 +459,7 @@ ______________________________________*/
       const selectedNodes = layerRef.current
         .find(".shape")
         .filter((node) =>
-          Konva.Util.haveIntersection(box, node.getClientRect()),
+          Konva.Util.haveIntersection(box, node.getClientRect())
         );
       selectedNodes.forEach((node) => {
         node.opacity(0.2);
@@ -567,117 +487,22 @@ ______________________________________*/
         break;
     }
 
-    // ✅ Use the SAME ID for all intermediate updates
-    if (
-      previewNodeRef.current &&
-      ActiveTool !== "selection" &&
-      ActiveTool !== "eraser"
-    ) {
+    // 🔐 Broadcast live drawing updates (throttled)
+    if (previewNodeRef.current && ActiveTool !== "selection" && ActiveTool !== "eraser") {
       const attrs = previewNodeRef.current.getAttrs();
       const tempShape = {
         ...attrs,
-        id: currentDrawingIdRef.current, // ✅ Same ID!
+        id: crypto.randomUUID(), // Temporary ID
         type: ActiveTool,
         version: 1,
         deleted: false,
-        isPreview: true, // ✅ Mark as preview
       };
-      await broadCasteShapeUpdate([tempShape], true);
+      await broadcastShapeUpdate([tempShape], true);
     }
   };
 
-  const handleMouseUp = async () => {
-    if (!isDrawing.current || !previewNodeRef.current || ActiveTool == "")
-      return;
-
-    if (ActiveTool === "eraser") {
-      // ... existing eraser logic ...
-      layerRef.current.find(".shape").forEach((node) => {
-        node.opacity(1);
-      });
-
-      const ids = new Set(erasedIdsRef.current);
-
-      setShapes((prev) => {
-        const updated = prev.map((s) =>
-          ids.has(s.id) ? { ...s, deleted: true, version: s.version + 1 } : s,
-        );
-        broadCasteShapeUpdate(updated.filter((s) => ids.has(s.id)));
-      });
-
-      trRef.current.nodes([]);
-      trRef.current.getLayer()?.batchDraw();
-
-      previewNodeRef.current.destroy();
-      previewNodeRef.current = null;
-
-      erasedIdsRef.current.clear();
-      isErasingRef.current = false;
-      isDrawing.current = false;
-
-      setIsEraserEnable(false);
-      setPointerEvent("");
-      return;
-    }
-
-    if (ActiveTool === "selection") {
-      const selectionBox = previewNodeRef.current;
-      const box = selectionBox.getClientRect();
-      const selectedNodes = layerRef.current
-        .find(".shape")
-        .filter((node) =>
-          Konva.Util.haveIntersection(box, node.getClientRect()),
-        );
-
-      setPendingid(selectedNodes.map((n) => n.id()));
-
-      selectionBox.destroy();
-      previewNodeRef.current = null;
-
-      isDrawing.current = false;
-      setActiveTool("selection");
-      setPointerEvent("");
-      return;
-    }
-
-    const attrs = previewNodeRef.current.getAttrs();
-    // ✅ Use the same ID from drawing session
-    const id = currentDrawingIdRef.current;
-    const Name = "shape";
-    const newShape = {
-      ...attrs,
-      id,
-      Name,
-      type: ActiveTool,
-      draggable: true,
-      listening: true,
-      deleted: false,
-      version: 1,
-      versionNonce: Math.random(),
-      isPreview: false, // ✅ No longer a preview
-    };
-
-    setShapes((prev) => {
-      // ✅ Remove any preview version and add final version
-      const filtered = prev.filter(s => s.id !== id);
-      const next = [...filtered, newShape];
-      broadCasteShapeUpdate(next);
-      return next;
-    });
-
-    setPendingid([id]);
-    isDrawing.current = false;
-    previewNodeRef.current.destroy();
-    previewNodeRef.current = null;
-    currentDrawingIdRef.current = null; // ✅ Clear temp ID
-    setActiveTool("selection");
-    setPointerEvent("");
-  };
   const handleRect = (pos, startX, startY) => {
     if (!previewNodeRef.current) return;
-    // if(isShiftPressed.current){
-
-    // }
     previewNodeRef.current.setAttrs({
       x: Math.min(startX, pos.x),
       y: Math.min(startY, pos.y),
@@ -704,25 +529,104 @@ ______________________________________*/
       radiusY,
     });
   };
+
   const handleArrow = (pos, startX, startY) => {
     if (!previewNodeRef.current) return;
     previewNodeRef.current.setAttrs({
       points: [startX, startY, pos.x, pos.y],
     });
   };
+
   const handlePencil = (pos) => {
     if (!previewNodeRef.current) return;
-
     const line = previewNodeRef.current;
     const points = line.points();
-
     line.points([...points, pos.x, pos.y]);
   };
 
-  /*___________________________________
-  
-  Rendering Canvas & Drawing
-  _____________________________________*/
+  const handleMouseUp = async () => {
+    if (!isDrawing.current || !previewNodeRef.current || ActiveTool == "")
+      return;
+
+    if (ActiveTool === "eraser") {
+      layerRef.current.find(".shape").forEach((node) => {
+        node.opacity(1);
+      });
+
+      const ids = new Set(erasedIdsRef.current);
+
+      const updatedShapes = Shapes.map((shape) =>
+        ids.has(shape.id) ? { ...shape, deleted: true, version: (shape.version || 0) + 1 } : shape
+      );
+      
+      setShapes(updatedShapes);
+
+      // 🔐 Broadcast erasure
+      await broadcastShapeUpdate(updatedShapes.filter(s => ids.has(s.id)));
+
+      trRef.current.nodes([]);
+      trRef.current.getLayer()?.batchDraw();
+
+      previewNodeRef.current.destroy();
+      previewNodeRef.current = null;
+
+      erasedIdsRef.current.clear();
+      isErasingRef.current = false;
+      isDrawing.current = false;
+
+      setIsEraserEnable(false);
+      setPointerEvent("");
+      return;
+    }
+
+    if (ActiveTool === "selection") {
+      const selectionBox = previewNodeRef.current;
+      const box = selectionBox.getClientRect();
+      const selectedNodes = layerRef.current
+        .find(".shape")
+        .filter((node) =>
+          Konva.Util.haveIntersection(box, node.getClientRect())
+        );
+
+      setPendingid(selectedNodes.map((n) => n.id()));
+
+      selectionBox.destroy();
+      previewNodeRef.current = null;
+
+      isDrawing.current = false;
+      setActiveTool("selection");
+      setPointerEvent("");
+      return;
+    }
+
+    const attrs = previewNodeRef.current.getAttrs();
+    const id = crypto.randomUUID();
+    const Name = "shape";
+    const newShape = {
+      ...attrs,
+      id,
+      Name,
+      type: ActiveTool,
+      draggable: true,
+      listening: true,
+      deleted: false,
+      version: 1,
+      versionNonce: Math.random(),
+    };
+
+    setShapes((prev) => [...prev, newShape]);
+    setPendingid([id]);
+
+    // 🔐 Broadcast final shape to other users
+    await broadcastShapeUpdate([newShape]);
+
+    isDrawing.current = false;
+    previewNodeRef.current.destroy();
+    previewNodeRef.current = null;
+    setActiveTool("selection");
+    setPointerEvent("");
+  };
+
   return (
     <div className="Canvas-wrapper">
       <Stage
@@ -759,4 +663,4 @@ ______________________________________*/
   );
 };
 
-  export default Canvas;
+export default Canvas;

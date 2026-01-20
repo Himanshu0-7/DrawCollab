@@ -27,7 +27,7 @@ const Canvas = ({
   const previewNodeRef = useRef(null);
   const trRef = useRef(null);
   const shapeRef = useRef({});
-  const currentDrawingIdRef = useRef(null);
+
   const isShiftPressed = useRef(false);
   const isDrawing = useRef(false);
   const isDeletePressed = useRef(false);
@@ -138,17 +138,17 @@ ______________________________________*/
       } else {
         var obj = payload.encryptedData
         arr = Object.keys(obj)
-          .sort((a, b) => Number(a) - Number(b))
-          .map(k => obj[k]);
+        .sort((a, b) => Number(a) - Number(b))
+        .map(k => obj[k]);
       }
-      console.log("inside scene update arr=", arr);
+      console.log("inside scene update arr=",arr);
       const decryptedData = await decryptData(
         new Uint8Array(arr),
         cryptoKey,
       );
-      console.log("After Drawing");
+      console.log("shapes",JSON.parse(decryptedData));
       const { Shapes: remoteShape } = JSON.parse(decryptedData);
-
+      
       setShapes((prevShapes) => {
         const shapeMap = new Map(prevShapes.map((s) => [s.id, s]));
         remoteShape.forEach((remoteShape) => {
@@ -164,17 +164,17 @@ ______________________________________*/
     }
   };
 
-  // Update handleRemoteDrawingUpdate to handle preview shapes
   const handleRemoteDrawingUpdate = async (payload) => {
     if (!payload.encryptedData || !cryptoKey) return;
 
     try {
-      var obj = payload.encryptedData;
+      var obj = payload.encryptedData
       const arr = Object.keys(obj)
         .sort((a, b) => Number(a) - Number(b))
         .map(k => obj[k]);
       const decryptedData = await decryptData(
         new Uint8Array(arr),
+        // new Uint8Array(payload.encryptedData),
         cryptoKey,
       );
 
@@ -185,14 +185,12 @@ ______________________________________*/
       setShapes((prevShapes) => {
         const shapeMap = new Map();
 
-        // ✅ Keep all non-preview shapes
+        // keep previous shapes
         prevShapes.forEach((shape) => {
-          if (!shape.isPreview) {
-            shapeMap.set(shape.id, shape);
-          }
+          shapeMap.set(shape.id, shape);
         });
 
-        // ✅ Add/update with remote shapes (which may be previews)
+        // overwrite / add remote shapes
         remoteShapes.forEach((shape) => {
           shapeMap.set(shape.id, shape);
         });
@@ -430,10 +428,6 @@ ______________________________________*/
     if (ActiveTool == "") return;
     const point = stage.getPointerPosition();
     startPos.current = { x: point.x, y: point.y };
-
-    // ✅ Generate a temporary ID for this drawing session
-    currentDrawingIdRef.current = crypto.randomUUID();
-
     if (ActiveTool === "eraser") {
       isDrawing.current = true;
       setIsEraserEnable(true);
@@ -526,9 +520,9 @@ ______________________________________*/
     const startY = startPos.current.y;
     lastPos.current = pos;
     sendCursorPosition(pos.x, pos.y);
-
     if (ActiveTool === "eraser" && isErasingRef.current) {
       const selectionBox = previewNodeRef.current;
+      // const { x, y } = selectionBox.position();
 
       previewNodeRef.current.setAttrs({
         x: pos.x,
@@ -566,8 +560,6 @@ ______________________________________*/
         handlePencil(pos);
         break;
     }
-
-    // ✅ Use the SAME ID for all intermediate updates
     if (
       previewNodeRef.current &&
       ActiveTool !== "selection" &&
@@ -576,11 +568,10 @@ ______________________________________*/
       const attrs = previewNodeRef.current.getAttrs();
       const tempShape = {
         ...attrs,
-        id: currentDrawingIdRef.current, // ✅ Same ID!
+        id: crypto.randomUUID(),
         type: ActiveTool,
         version: 1,
         deleted: false,
-        isPreview: true, // ✅ Mark as preview
       };
       await broadCasteShapeUpdate([tempShape], true);
     }
@@ -589,15 +580,15 @@ ______________________________________*/
   const handleMouseUp = async () => {
     if (!isDrawing.current || !previewNodeRef.current || ActiveTool == "")
       return;
-
     if (ActiveTool === "eraser") {
-      // ... existing eraser logic ...
+      // 1️⃣ Restore opacity
       layerRef.current.find(".shape").forEach((node) => {
         node.opacity(1);
       });
 
       const ids = new Set(erasedIdsRef.current);
 
+      // 2️⃣ Soft delete (Excalidraw-style)
       setShapes((prev) => {
         const updated = prev.map((s) =>
           ids.has(s.id) ? { ...s, deleted: true, version: s.version + 1 } : s,
@@ -605,12 +596,15 @@ ______________________________________*/
         broadCasteShapeUpdate(updated.filter((s) => ids.has(s.id)));
       });
 
+      // 3️⃣ Cleanup transformer
       trRef.current.nodes([]);
       trRef.current.getLayer()?.batchDraw();
 
+      // 4️⃣ Destroy preview node
       previewNodeRef.current.destroy();
       previewNodeRef.current = null;
 
+      // 5️⃣ Reset flags
       erasedIdsRef.current.clear();
       isErasingRef.current = false;
       isDrawing.current = false;
@@ -619,7 +613,11 @@ ______________________________________*/
       setPointerEvent("");
       return;
     }
+    /* _______________________________
 
+        Handling All Shapes
+        
+_________________________________*/
     if (ActiveTool === "selection") {
       const selectionBox = previewNodeRef.current;
       const box = selectionBox.getClientRect();
@@ -641,8 +639,7 @@ ______________________________________*/
     }
 
     const attrs = previewNodeRef.current.getAttrs();
-    // ✅ Use the same ID from drawing session
-    const id = currentDrawingIdRef.current;
+    const id = crypto.randomUUID();
     const Name = "shape";
     const newShape = {
       ...attrs,
@@ -654,13 +651,9 @@ ______________________________________*/
       deleted: false,
       version: 1,
       versionNonce: Math.random(),
-      isPreview: false, // ✅ No longer a preview
     };
-
     setShapes((prev) => {
-      // ✅ Remove any preview version and add final version
-      const filtered = prev.filter(s => s.id !== id);
-      const next = [...filtered, newShape];
+      const next = [...prev, newShape];
       broadCasteShapeUpdate(next);
       return next;
     });
@@ -669,9 +662,7 @@ ______________________________________*/
     isDrawing.current = false;
     previewNodeRef.current.destroy();
     previewNodeRef.current = null;
-    currentDrawingIdRef.current = null; // ✅ Clear temp ID
     setActiveTool("selection");
-    setPointerEvent("");
   };
   const handleRect = (pos, startX, startY) => {
     if (!previewNodeRef.current) return;
@@ -720,9 +711,9 @@ ______________________________________*/
   };
 
   /*___________________________________
-  
-  Rendering Canvas & Drawing
-  _____________________________________*/
+ 
+        Rendering Canvas & Drawing
+ _____________________________________*/
   return (
     <div className="Canvas-wrapper">
       <Stage
@@ -759,4 +750,4 @@ ______________________________________*/
   );
 };
 
-  export default Canvas;
+export default Canvas;

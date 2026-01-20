@@ -40,7 +40,29 @@ module.exports = function setupWebSocket(server) {
 
     const room = rooms.get(ws.roomId);
     room.encryptedData = message.payload.encryptedData;
-    console.log(room.encryptedData);
+    // console.log(room.encryptedData);
+    
+    broadCasteToRoom(
+      ws.roomId,
+      {
+        type: "SCENE_UPDATE",
+        payload: {
+          encryptedData: room.encryptedData,
+          userId: ws.id,
+        },
+      },
+      ws,
+    );
+  };
+  const handleSceneUpdateDrawing = (ws, message) => {
+    if (!message.payload?.encryptedData) {
+      console.warn("Empty SCENE_UPDATE ignored");
+      return;
+    }
+
+    const room = rooms.get(ws.roomId);
+    room.encryptedData = message.payload.encryptedData;
+    // console.log(room.encryptedData);
     
     broadCasteToRoom(
       ws.roomId,
@@ -117,7 +139,7 @@ module.exports = function setupWebSocket(server) {
       //   );
       ws.send(
         JSON.stringify({
-          type: "SCENE_UPDATE_DRAWING",
+          type: "SCENE_UPDATE",
           payload: {
             encryptedData: room.encryptedData,
           },
@@ -142,7 +164,7 @@ module.exports = function setupWebSocket(server) {
             handleSceneUpdate(ws, message);
             break;
           case "SCENE_UPDATE_DRAWING":
-            handleSceneUpdate(ws, message);
+            handleSceneUpdateDrawing(ws, message);
             break;
           case "MOUSE_LOCATION":
             handleMouseLocation(ws, message);
