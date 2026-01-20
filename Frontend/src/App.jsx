@@ -10,7 +10,7 @@ function App() {
   const [isEraserEnable, setIsEraserEnable] = useState(false);
   const [pointerEvent, setPointerEvent] = useState("");
   const [roomInfo, setRoomInfo] = useState(null);
-  const encryptionKey = useRef(null);
+  const [encryptionKey, setEncrptionKey] = useState(null);
   const shareBtn = () => {
     setIshare((prev) => (prev === 0 ? 1 : 0));
   };
@@ -18,30 +18,34 @@ function App() {
   useEffect(() => {
     const parseHash = () => {
       const hash = window.location.hash;
-
       if (!hash.startsWith("#room=")) {
         setRoomInfo(null);
+        setEncrptionKey(null); // Clear key too
         return;
       }
-
       const [, value] = hash.split("#room=");
       const [roomId, key] = value.split(",");
-
       if (!roomId || !key) {
         setRoomInfo(null);
+        setEncrptionKey(null);
         return;
       }
-
       setRoomInfo({ roomId, key });
+
+      // 👇 ADD THIS: Reconstruct the JWK from the hash
+      setEncrptionKey({
+        kty: "oct",
+        k: key,
+        alg: "A128GCM",
+        ext: true,
+      });
     };
-
-    parseHash(); // 👈 run once on mount
+    parseHash();
     window.addEventListener("hashchange", parseHash);
-
     return () => {
       window.removeEventListener("hashchange", parseHash);
     };
-  }, []); // ✅ VERY IMPORTANT
+  }, []);
 
   return (
     <>
@@ -63,7 +67,7 @@ function App() {
       <Session
         isloading={isshare}
         roomInfo={roomInfo}
-        encryptionKey={encryptionKey}
+        setEncrptionKey={setEncrptionKey}
       ></Session>
     </>
   );

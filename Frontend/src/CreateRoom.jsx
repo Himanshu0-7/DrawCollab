@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export function CreateRoom({ encryptionKey }) {
+export function CreateRoom({ setEncrptionKey }) {
   const roomIdRef = useRef(crypto.randomUUID());
   const [sessionActive, setSessionActive] = useState(false);
 
@@ -19,12 +19,14 @@ export function CreateRoom({ encryptionKey }) {
       true,
       ["encrypt", "decrypt"],
     );
-    encryptionKey.current = await window.crypto.subtle.exportKey(
+    const jwk = await window.crypto.subtle.exportKey(
       "jwk",
       cryptoKey,
     );
-    window.location.hash = `#room=${roomIdRef.current},${encryptionKey.current.k}`;
+    
 
+    window.location.hash = `#room=${roomIdRef.current},${jwk.k}`;
+    setEncrptionKey(jwk)
     setSessionActive(true);
 
     // exporting webkey to jwk

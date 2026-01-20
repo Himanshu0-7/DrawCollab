@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import Sky from "./Animation/Sky";
 import { CreateRoom } from "./CreateRoom";
-const Session = ({ isloading, roomInfo, encryptionKey }) => {
+const Session = ({ isloading, roomInfo, setEncrptionKey }) => {
   const roomUrl = window.location.href;
   useEffect(() => {
     if (isloading === 1) {
@@ -48,7 +48,7 @@ const Session = ({ isloading, roomInfo, encryptionKey }) => {
             </div>
           )}
 
-          <CreateRoom encryptionKey={encryptionKey}></CreateRoom>
+          <CreateRoom setEncrptionKey={setEncrptionKey}></CreateRoom>
         </section>
       </div>
     </>

@@ -44,21 +44,20 @@ const Canvas = ({
 
             useEffects
 ______________________________________*/
-  const cryptoKeyRef = useRef(null);
+  const [cryptoKey, setCryptoKey] = useState(null);
 
   useEffect(() => {
-    if (!encryptionKey.current) return;
-
+    if (!encryptionKey) return;
     crypto.subtle
       .importKey(
         "jwk",
-        encryptionKey.current, // FULL JWK
+        encryptionKey, // FULL JWK
         { name: "AES-GCM" },
         false,
         ["encrypt", "decrypt"],
       )
       .then((cryptoKey) => {
-        cryptoKeyRef.current = cryptoKey;
+        setCryptoKey(cryptoKey);
       });
   }, [encryptionKey]);
   useEffect(() => {
@@ -77,17 +76,14 @@ ______________________________________*/
   }, [ActiveTool]);
 
   const initialScenePayload = async () => {
-    const payload = encryptData(
-      JSON.stringify({ Shapes }),
-      cryptoKeyRef.current,
-    );
+    const payload = await encryptData(JSON.stringify({ Shapes }), cryptoKey);
     await fetch(`http://localhost:3000/api/payload?room=${roomInfo.roomId}`, {
       method: "POST",
       body: payload,
     });
 
     const ws = new WebSocket(`ws://localhost:3000/ws?room=${roomInfo.roomId}`);
-    
+
     ws.onopen = () => {
       console.log("ws connected to roomid", roomInfo.roomId);
     };
@@ -95,28 +91,23 @@ ______________________________________*/
       const message = JSON.parse(e.data);
       await handleWebsocketMessgae(message);
     };
-    
+
     setSocket(ws);
     return () => {
-      ws.close(); // 👈 THIS runs before the next effect
+      ws.close();
     };
   };
   /*_________________________________________
   
   Handling Websocket          
-  
   __________________________________________*/
-  // useEffect(() => {
-    //   if (!roomInfo || !cryptoKeyRef.current) return;
-    // }, [roomInfo, cryptoKeyRef.current, Shapes]);
-    
-    useEffect(() => {
-      if (!roomInfo && !cryptoKeyRef.current) return;
-      initialScenePayload();
-  }, [roomInfo]);
+
+  useEffect(() => {
+    if (!roomInfo || !cryptoKey) return;
+    initialScenePayload();
+  }, [roomInfo, cryptoKey]);
 
   const handleWebsocketMessgae = async (message) => {
-    console.log(message.type)
     switch (message.type) {
       case "SCENE_UPDATE":
         await handleRemoteSceneUpdate(message.payload);
@@ -128,7 +119,7 @@ ______________________________________*/
         handleRemoteMouseLocation(message.payload);
         break;
       case "USER_JOINED":
-        console.log("User Joined", message.payload.userName);
+        console.log("User Joined", message.payload);
         break;
       case "USER_LEFT":
         handleUserLeft(message.payload);
@@ -137,15 +128,14 @@ ______________________________________*/
   };
 
   const handleRemoteSceneUpdate = async (payload) => {
-    if(!cryptoKeyRef.current && !roomInfo) return;
+    if (!cryptoKey || !roomInfo) return;
     try {
-      console.log(cryptoKeyRef.current);
       
       const decryptedData = await decryptData(
-        new Uint8Array(payload.encryptedData),
-        cryptoKeyRef.current,
+        new Uint8Array(payload.encryptedData.data),
+        cryptoKey,
       );
-      const { shapes: remoteShape } = JSON.parse(decryptedData);
+      const { Shapes: remoteShape } = JSON.parse(decryptedData);
       setShapes((prevShapes) => {
         const shapeMap = new Map(prevShapes.map((s) => [s.id, s]));
         remoteShape.forEach((remoteShape) => {
@@ -160,20 +150,33 @@ ______________________________________*/
       console.error("Failed to Decrypt Scene Update", error);
     }
   };
-
+  
   const handleRemoteDrawingUpdate = async (payload) => {
-    if (!payload.encryptedData || !cryptoKeyRef.current) return;
+    if (!payload.encryptedData || !cryptoKey) return;
+    
     try {
+      console.log(payload.encryptedData.data);
       const decryptedData = await decryptData(
-        new Uint8Array(payload.encryptedData),
-        cryptoKeyRef.current,
+        new Uint8Array(payload.encryptedData.data),
+        cryptoKey,
       );
 
-      const { shapes: remoteShape } = JSON.parse(decryptedData);
+      const { Shapes: remoteShapes } = JSON.parse(decryptedData);
+
+      if (!Array.isArray(remoteShapes)) return;
 
       setShapes((prevShapes) => {
-        const shapeMap = new Map(prevShapes.map((s) => [s.id, s]));
-        shapeMap.set(remoteShape.id, remoteShape);
+        const shapeMap = new Map();
+
+        // keep previous shapes
+        prevShapes.forEach((shape) => {
+          shapeMap.set(shape.id, shape);
+        });
+
+        // overwrite / add remote shapes
+        remoteShapes.forEach((shape) => {
+          shapeMap.set(shape.id, shape);
+        });
 
         return Array.from(shapeMap.values());
       });
@@ -270,49 +273,45 @@ ______________________________________*/
   }, []);
 
   const encryptData = async (data) => {
-    if (!cryptoKeyRef.current) return null;
-    const IV = crypto.getRandomValues(new Uint8Array(12));
+    if (!cryptoKey) return null;
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(data);
 
     const encryptedBuffer = await crypto.subtle.encrypt(
-      { name: "AES-GCM", IV },
-      cryptoKeyRef.current,
+      { name: "AES-GCM", iv: iv },
+      cryptoKey,
       encoded,
     );
     const encrypted = new Uint8Array(encryptedBuffer);
-    const blob = new Uint8Array(IV.length + encrypted.length);
-    blob.set(IV, 0);
-    blob.set(encrypted, IV.length);
+    const blob = new Uint8Array(iv.length + encrypted.length);
+    blob.set(iv, 0);
+    blob.set(encrypted, iv.length);
     return blob;
   };
   const decryptData = async (encryptedBlob, key) => {
-    const IV = encryptedBlob.slice(0, 12);
+    // console.log(encryptedBlob)
+    const iv = encryptedBlob.slice(0, 12);
     const data = encryptedBlob.slice(12);
     const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: "AES-GCM", IV },
+      { name: "AES-GCM", iv: iv },
       key,
       data,
     );
     return new TextDecoder().decode(decryptedBuffer);
   };
   const broadCasteShapeUpdate = async (shapes, isDrawing = false) => {
-    if (
-      !socket ||
-      socket.readyState !== WebSocket.OPEN ||
-      !cryptoKeyRef.current
-    )
-      return;
-
+    if (!socket || socket.readyState !== WebSocket.OPEN || !cryptoKey) return;
+    // console.log(shapes);
     try {
       const encryptedPayload = await encryptData(
         JSON.stringify({ shapes }),
-        cryptoKeyRef.current,
+        cryptoKey,
       );
       socket.send(
         JSON.stringify({
           type: isDrawing ? "SCENE_UPDATE_DRAWING" : "SCENE_UPDATE",
           payload: {
-            encryptData: Array.from(encryptedPayload),
+            encryptedData: encryptedPayload,
           },
         }),
       );
@@ -370,7 +369,7 @@ ______________________________________*/
           : shape,
       ),
     );
-    await broadCasteShapeUpdate(shapes.filter((s) => ids.has(s.id)));
+    await broadCasteShapeUpdate(Shapes.filter((s) => ids.has(s.id)));
     // cleanup transformer
     trRef.current.nodes([]);
     trRef.current.getLayer()?.batchDraw();
@@ -493,6 +492,7 @@ ______________________________________*/
     layerRef.current.batchDraw();
     setPointerEvent("none");
   };
+
   const handleMouseMove = async (e) => {
     if (!isDrawing.current || ActiveTool == "" || !previewNodeRef.current)
       return;
@@ -572,18 +572,13 @@ ______________________________________*/
       const ids = new Set(erasedIdsRef.current);
 
       // 2️⃣ Soft delete (Excalidraw-style)
-      setShapes((prev) =>
-        prev.map((shape) =>
-          ids.has(shape.id)
-            ? { ...shape, deleted: true, version: (shape.version || 0) + 1 }
-            : shape,
-        ),
-      );
-      await broadCasteShapeUpdate(
-        Shapes.filter((s) => {
-          ids.has(s.id);
-        }),
-      );
+      setShapes((prev) => {
+        const updated = prev.map((s) =>
+          ids.has(s.id) ? { ...s, deleted: true, version: s.version + 1 } : s,
+        );
+        broadCasteShapeUpdate(updated.filter((s) => ids.has(s.id)));
+      });
+
       // 3️⃣ Cleanup transformer
       trRef.current.nodes([]);
       trRef.current.getLayer()?.batchDraw();
@@ -629,21 +624,23 @@ _________________________________*/
     const attrs = previewNodeRef.current.getAttrs();
     const id = crypto.randomUUID();
     const Name = "shape";
-    setShapes((prev) => [
-      ...prev,
-      {
-        ...attrs,
-        id,
-        Name,
-        type: ActiveTool,
-        draggable: true,
-        listening: true,
-        deleted: false,
-        version: 1,
-        versionNonce: Math.random(),
-      },
-    ]);
-    await broadCasteShapeUpdate(Shapes);
+    const newShape = {
+      ...attrs,
+      id,
+      Name,
+      type: ActiveTool,
+      draggable: true,
+      listening: true,
+      deleted: false,
+      version: 1,
+      versionNonce: Math.random(),
+    };
+    setShapes((prev) => {
+      const next = [...prev, newShape];
+      broadCasteShapeUpdate(next);
+      return next;
+    });
+
     setPendingid([id]);
     isDrawing.current = false;
     previewNodeRef.current.destroy();
