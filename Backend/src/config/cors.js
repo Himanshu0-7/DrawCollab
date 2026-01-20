@@ -2,8 +2,8 @@ const cors = require('cors')
 
 module.exports = cors({
     origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
-    credentials: true,
+    credentials: false,
     methods:['GET', 'POST'],
-    allowedHeaders:['Content-Type'],
+    allowedHeaders: ["Content-Type", "Authorization"],
     
 })

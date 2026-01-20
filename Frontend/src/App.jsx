@@ -1,33 +1,74 @@
-
-import Home from "./Home";
-import { Route, Routes } from "react-router-dom";
-import Room from "./Room";
-import'./Shared.css'
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Navbar from "./Navbar";
+import Session from "./Session";
+import Canvas from "./Canvas";
+import Cursor from "./Cursor";
+import "./Shared.css";
 function App() {
-  // const send = () => {
-  //   if (!text || !wsRef.current) return;
+  const [isshare, setIshare] = useState(0);
+  const [ActiveTool, setActiveTool] = useState("selection");
+  const [isEraserEnable, setIsEraserEnable] = useState(false);
+  const [pointerEvent, setPointerEvent] = useState("");
+  const [roomInfo, setRoomInfo] = useState(null);
+  const [encryptionKey, setEncrptionKey] = useState(null);
+  const shareBtn = () => {
+    setIshare((prev) => (prev === 0 ? 1 : 0));
+  };
 
-  //   wsRef.current?.send(
-  //     JSON.stringify({
-  //       type: "chat",
-  //       to: to,
-  //       text: text,
-  //     })
-  //   );
-  //   document.getElementById("message").value = "";
-  //   settext("");
-  // };
-  
+  useEffect(() => {
+    const parseHash = () => {
+      const hash = window.location.hash;
+      if (!hash.startsWith("#room=")) {
+        setRoomInfo(null);
+        setEncrptionKey(null); // Clear key too
+        return;
+      }
+      const [, value] = hash.split("#room=");
+      const [roomId, key] = value.split(",");
+      if (!roomId || !key) {
+        setRoomInfo(null);
+        setEncrptionKey(null);
+        return;
+      }
+      setRoomInfo({ roomId, key });
+
+      // 👇 ADD THIS: Reconstruct the JWK from the hash
+      setEncrptionKey({
+        kty: "oct",
+        k: key,
+        alg: "A128GCM",
+        ext: true,
+      });
+    };
+    parseHash();
+    window.addEventListener("hashchange", parseHash);
+    return () => {
+      window.removeEventListener("hashchange", parseHash);
+    };
+  }, []);
+
   return (
     <>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route
-          path="/room/:roomId"
-          element={<Room/>}
-        />
-      </Routes>
+      <Navbar
+        shareBtn={shareBtn}
+        setActiveTool={setActiveTool}
+        ActiveTool={ActiveTool}
+        pointerEvent={pointerEvent}
+      ></Navbar>
+      <Cursor isEraserEnable={isEraserEnable} />
+      <Canvas
+        ActiveTool={ActiveTool}
+        setActiveTool={setActiveTool}
+        setPointerEvent={setPointerEvent}
+        setIsEraserEnable={setIsEraserEnable}
+        roomInfo={roomInfo}
+        encryptionKey={encryptionKey}
+      ></Canvas>
+      <Session
+        isloading={isshare}
+        roomInfo={roomInfo}
+        setEncrptionKey={setEncrptionKey}
+      ></Session>
     </>
   );
 }

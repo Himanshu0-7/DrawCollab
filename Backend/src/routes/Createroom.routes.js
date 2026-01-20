@@ -1,11 +1,12 @@
 const express = require('express')
 const router = express.Router()
-const {randomUUID} = require('crypto')
-router.get('/create',(req, res) =>{
-    const roomid = randomUUID()
-    return res.json({
-        roomid: roomid
-    })
+const roomData = require('../shareMemory')
 
+
+router.post('/payload',(req, res) =>{
+  const buffer = req.body
+   roomData.set(buffer)
+
+    res.status(200).json({ok: true})
 })
 module.exports = router
