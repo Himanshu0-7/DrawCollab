@@ -19,6 +19,7 @@ const Canvas = ({
   roomInfo,
   encryptionKey,
   pointerEvent,
+  setUserName,
   userName,
 }) => {
   // ______________________________________
@@ -60,6 +61,8 @@ const Canvas = ({
 
   const cursorColorsRef = useRef(new Map());
   const [buttonActive, setButtonActive] = useState(null);
+  const API_URL = import.meta.env.VITE_API_URL;
+  const WS_URL = import.meta.env.VITE_WS_URL;
   const isDrawingTool =
     ActiveTool && ActiveTool !== "selection" && ActiveTool !== "";
 
@@ -161,7 +164,6 @@ ______________________________________*/
   };
   const broadCasteShapeUpdate = async (Shapes, isDrawing = false) => {
     if (!socket || socket.readyState !== WebSocket.OPEN || !cryptoKey) return;
-    // console.log(shapes);
     try {
       const encryptedBlob = await encryptData(JSON.stringify({ Shapes }));
       const frame = buildFrame({
@@ -236,6 +238,9 @@ ______________________________________*/
 
     try {
       const data = JSON.parse(raw);
+      if(data.userName){
+        setUserName(userName);
+      }
       if (Array.isArray(data.shapes)) {
         setShapes(data.shapes);
       }
@@ -252,6 +257,7 @@ ______________________________________*/
         key,
         JSON.stringify({
           shapes: Shapes.filter((s) => !s.isPreview),
+          userName: userName,
           updatedAt: Date.now(),
         }),
       );
@@ -310,8 +316,8 @@ ______________________________________*/
           const existing = shapeMap.get(remoteShape.id);
 
           shapeMap.set(remoteShape.id, {
-            ...existing, // ✅ keep all original properties (type, stroke, width, etc.)
-            ...remoteShape, // ✅ overlay only what changed (x, y)
+            ...existing, 
+            ...remoteShape, 
             isPreview: true,
             listening: false,
             draggable: false,
@@ -463,7 +469,7 @@ ______________________________________*/
 
   const initialScenePayload = async () => {
     const encryptedBlob = await encryptData(JSON.stringify({ Shapes }));
-    await fetch(`http://localhost:3000/api/payload?room=${roomInfo.roomId}`, {
+    await fetch(`${API_URL}/api/payload?room=${roomInfo.roomId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/octet-stream",
@@ -471,7 +477,7 @@ ______________________________________*/
       body: encryptedBlob,
     });
 
-    const ws = new WebSocket(`ws://localhost:3000/ws?room=${roomInfo.roomId}`);
+    const ws = new WebSocket(`${WS_URL}/ws?room=${roomInfo.roomId}`);
       
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
@@ -663,12 +669,10 @@ _____________________________________*/
     const layer = node.getLayer();
     if (!layer) return;
 
-    // 🔒 disable dragging on ALL shapes
     Object.values(shapeRef.current).forEach((n) => {
       n.draggable(false);
     });
 
-    // 🔓 enable dragging ONLY on selected node
     node.draggable(true);
 
     tr.nodes([node]);
@@ -885,7 +889,6 @@ ________________________________________*/
     if (clickedOnEmpty) {
       trRef.current.nodes([]);
 
-      // 🔒 disable dragging on all shapes
       Object.values(shapeRef.current).forEach((node) => {
         node.draggable(false);
       });
@@ -1045,20 +1048,19 @@ ________________________________________*/
         return;
       }
 
-      // ✅ CORRECT
       switch (ActiveTool) {
         case "rect":
         case "selection":
-          handleRect(canvasPos, startPos.current.x, startPos.current.y); // ✅
+          handleRect(canvasPos, startPos.current.x, startPos.current.y); 
           break;
         case "elipse":
-          handleElipse(canvasPos, startPos.current.x, startPos.current.y); // ✅
+          handleElipse(canvasPos, startPos.current.x, startPos.current.y); 
           break;
         case "arrow":
-          handleArrow(canvasPos, startPos.current.x, startPos.current.y); // ✅
+          handleArrow(canvasPos, startPos.current.x, startPos.current.y); 
           break;
         case "pencil":
-          handlePencil(canvasPos); // ✅
+          handlePencil(canvasPos); 
           break;
       }
       layerRef.current.batchDraw();

@@ -83,7 +83,6 @@ function App() {
       }
       setRoomInfo({ roomId, key });
 
-      // 👇 ADD THIS: Reconstruct the JWK from the hash
       setUserName(generateUsername())
       setEncrptionKey({
         kty: "oct",
@@ -119,6 +118,7 @@ function App() {
         setIsEraserEnable={setIsEraserEnable}
         roomInfo={roomInfo}
         encryptionKey={encryptionKey}
+        setUserName={setUserName}
         userName={userName}
       ></Canvas>
       <Session

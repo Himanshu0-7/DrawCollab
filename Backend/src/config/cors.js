@@ -1,9 +1,9 @@
-const cors = require('cors')
-
+const cors = require("cors");
+require("dotenv").config();
+console.log(process.env.ORIGIN_URL);
 module.exports = cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
-    credentials: false,
-    methods:['GET', 'POST'],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    
-})
+  origin: [process.env.ORIGIN_URL],
+  credentials: false,
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+});
