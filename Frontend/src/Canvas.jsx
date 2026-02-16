@@ -205,29 +205,43 @@ ______________________________________*/
     if (ActiveTool.type === "image") {
       const { src, width, height } = ActiveTool.payload;
 
-      const id = crypto.randomUUID();
+      // Convert blob URL to base64
+      fetch(src)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = reader.result;
 
-      const imageShape = {
-        id,
-        type: "image",
-        x: 100,
-        y: 100,
-        width,
-        height,
-        src,
-        draggable: false,
-        deleted: false,
-        version: 1,
-      };
+            const id = crypto.randomUUID();
 
-      setShapes((prev) => {
-        const next = [...prev, imageShape];
-        broadCasteShapeUpdate(next);
-        return next;
-      });
+            const imageShape = {
+              id,
+              type: "image",
+              name: "shape",
+              x: 100,
+              y: 100,
+              width,
+              height,
+              src: base64String, // ← base64 instead of blob URL
+              draggable: false,
+              deleted: false,
+              version: 1,
+            };
 
-      setPendingid([id]);
-      setActiveTool("selection"); // reset tool
+            setShapes((prev) => {
+              const next = [...prev, imageShape];
+              broadCasteShapeUpdate(next);
+              return next;
+            });
+
+            setPendingid([id]);
+            setActiveTool("selection");
+          };
+          reader.readAsDataURL(blob);
+        });
+
+      return; // Don't execute the old code below
     }
   }, [ActiveTool]);
 
@@ -238,7 +252,7 @@ ______________________________________*/
 
     try {
       const data = JSON.parse(raw);
-      if(data.userName){
+      if (data.userName) {
         setUserName(userName);
       }
       if (Array.isArray(data.shapes)) {
@@ -268,7 +282,6 @@ ______________________________________*/
 
   useEffect(() => {
     if (pendingid.length === 0) return;
-
     const node = pendingid.map((id) => shapeRef.current[id]);
     if (node.length == 0) return;
     trRef.current.nodes(node);
@@ -316,8 +329,8 @@ ______________________________________*/
           const existing = shapeMap.get(remoteShape.id);
 
           shapeMap.set(remoteShape.id, {
-            ...existing, 
-            ...remoteShape, 
+            ...existing,
+            ...remoteShape,
             isPreview: true,
             listening: false,
             draggable: false,
@@ -447,7 +460,6 @@ ______________________________________*/
 
   const handleWebsocketMessgae = (type, decryptedPayload) => {
     // console.log("RECEIVED TYPE:", type, decryptedPayload);
-
     switch (type) {
       case "SCENE_UPDATE":
         handleRemoteSceneUpdate(decryptedPayload);
@@ -478,7 +490,7 @@ ______________________________________*/
     });
 
     const ws = new WebSocket(`${WS_URL}/ws?room=${roomInfo.roomId}`);
-      
+
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       console.log("ws connected to roomid", roomInfo.roomId);
@@ -522,7 +534,9 @@ __________________________________________*/
     if (selectedNodes.length === 0) return;
 
     const ids = new Set(selectedNodes.map((node) => node.id()));
-
+    selectedNodes.forEach((node) => {
+      node.destroy(); // This removes from layer and cleans up
+    });
     setShapes((prev) => {
       const deleted = [];
       const updated = prev.map((s) => {
@@ -775,29 +789,30 @@ _________________________________*/
     stage.container().style.cursor = cursor;
   }, [ActiveTool]);
 
- useEffect(() => {
-  const handleKeyDown = (e) => {
-    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-    
-    if (isCtrlOrCmd && e.key.toLowerCase() === "a") {
-      e.preventDefault();
-      
-      const transformer = trRef.current;
-      const layer = layerRef.current;
-      
-      if (!transformer || !layer) return;
-      
-      // Select all shapes with class 'shape'
-      const allShapes = layer.find('.shape');
-      
-      transformer.nodes(allShapes);
-      layer.batchDraw();
-    }
-  };
-  
-  window.addEventListener("keydown", handleKeyDown);
-  return () => window.removeEventListener("keydown", handleKeyDown);
-}, []);  useEffect(() => {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      if (isCtrlOrCmd && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+
+        const transformer = trRef.current;
+        const layer = layerRef.current;
+
+        if (!transformer || !layer) return;
+
+        // Select all shapes with class 'shape'
+        const allShapes = layer.find(".shape");
+
+        transformer.nodes(allShapes);
+        layer.batchDraw();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+  useEffect(() => {
     const down = (e) => {
       if (e.key === "Shift") {
         isShiftPressed.current = true;
@@ -1051,16 +1066,16 @@ ________________________________________*/
       switch (ActiveTool) {
         case "rect":
         case "selection":
-          handleRect(canvasPos, startPos.current.x, startPos.current.y); 
+          handleRect(canvasPos, startPos.current.x, startPos.current.y);
           break;
         case "elipse":
-          handleElipse(canvasPos, startPos.current.x, startPos.current.y); 
+          handleElipse(canvasPos, startPos.current.x, startPos.current.y);
           break;
         case "arrow":
-          handleArrow(canvasPos, startPos.current.x, startPos.current.y); 
+          handleArrow(canvasPos, startPos.current.x, startPos.current.y);
           break;
         case "pencil":
-          handlePencil(canvasPos); 
+          handlePencil(canvasPos);
           break;
       }
       layerRef.current.batchDraw();
@@ -1100,7 +1115,12 @@ ________________________________________*/
         });
 
         const ids = new Set(erasedIdsRef.current);
-
+        ids.forEach((id) => {
+          const node = shapeRef.current[id];
+          if (node) {
+            node.destroy(); // ← ADD THIS!
+          }
+        });
         setShapes((prev) => {
           const updated = prev.map((s) =>
             ids.has(s.id) ? { ...s, deleted: true, version: s.version + 1 } : s,
@@ -1108,7 +1128,6 @@ ________________________________________*/
           broadCasteShapeUpdate(updated.filter((s) => ids.has(s.id)));
           return updated;
         });
-
         trRef.current.nodes([]);
         trRef.current.getLayer()?.batchDraw();
 
@@ -1163,20 +1182,24 @@ ________________________________________*/
           strokeWidth: 2,
         }),
       };
-
       setShapes((prev) => {
         const filtered = prev.filter((s) => s.id !== id);
         const next = [...filtered, newShape];
         broadCasteShapeUpdate(next);
         return next;
       });
-
-      setPendingid([id]);
+      if (ActiveTool !== "pencil") {
+        setPendingid([id]);
+      }
       isDrawing.current = false;
       previewNodeRef.current.destroy();
       previewNodeRef.current = null;
       currentDrawingIdRef.current = null;
-      setActiveTool("selection");
+      if (ActiveTool !== "pencil") {
+        setActiveTool("selection");
+      } else {
+        setActiveTool("pencil");
+      }
       setPointerEvent("");
     };
 

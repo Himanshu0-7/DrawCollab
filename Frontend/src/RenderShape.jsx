@@ -25,6 +25,10 @@ const RenderShape = ({
     };
   }, [shape.src]);
 
+  if (shape.deleted) {
+    return null;
+  }
+
   const commonProps = {
     ref: (node) => RegisterRef(shape.id, node),
     listening: canInteract,
@@ -68,6 +72,7 @@ const RenderShape = ({
           image={imgElement}
           x={shape.x}
           y={shape.y}
+          name="shape"
           width={shape.width}
           height={shape.height}
         />
