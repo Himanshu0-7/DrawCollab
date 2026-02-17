@@ -205,46 +205,124 @@ ______________________________________*/
     if (ActiveTool.type === "image") {
       const { src, width, height } = ActiveTool.payload;
 
-      // Convert blob URL to base64
-      fetch(src)
-        .then((res) => res.blob())
-        .then((blob) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = reader.result;
+      const id = crypto.randomUUID();
 
-            const id = crypto.randomUUID();
+      const imageShape = {
+        id,
+        type: "image",
+        name: "shape",
+        x: 100,
+        y: 100,
+        width,
+        height,
+        src,
+        draggable: false,
+        deleted: false,
+        version: 1,
+      };
 
-            const imageShape = {
-              id,
-              type: "image",
-              name: "shape",
-              x: 100,
-              y: 100,
-              width,
-              height,
-              src: base64String, // ← base64 instead of blob URL
-              draggable: false,
-              deleted: false,
-              version: 1,
-            };
+      setShapes((prev) => {
+        const next = [...prev, imageShape];
+        broadCasteShapeUpdate(next);
+        return next;
+      });
 
-            setShapes((prev) => {
-              const next = [...prev, imageShape];
-              broadCasteShapeUpdate(next);
-              return next;
-            });
-
-            setPendingid([id]);
-            setActiveTool("selection");
-          };
-          reader.readAsDataURL(blob);
-        });
-
-      return; // Don't execute the old code below
+      setPendingid([id]);
+      setActiveTool("selection"); // reset tool
     }
   }, [ActiveTool]);
+  useEffect(() => {
+    const text = new Konva.Text({
+      x: 0,
+      y: 0,
+      text: "",
+      fontSize: 24,
+      fill: "white",
+    });
 
+    layerRef.current.add(text);
+    layerRef.current.draw();
+  }, []);
+
+  const handleDblClick = (e) => {
+    const stage = stageRef.current;
+
+    // Only allow on empty canvas
+    if (e.target !== stage) return;
+
+    const pointer = stage.getPointerPosition();
+
+    // convert to canvas coords
+    const transform = stage.getAbsoluteTransform().copy().invert();
+    const pos = transform.point(pointer);
+
+    // DOM position
+    const rect = stage.container().getBoundingClientRect();
+
+    const x = rect.left + pos.x * stageScale + stagePosition.x;
+    const y = rect.top + pos.y * stageScale + stagePosition.y;
+
+    const textarea = document.createElement("textarea");
+    document.body.appendChild(textarea);
+
+    textarea.style.position = "fixed";
+    textarea.style.left = x + "px";
+    textarea.style.top = y + "px";
+    textarea.style.fontSize = "24px";
+    textarea.style.color = "white";
+    textarea.style.background = "transparent";
+    textarea.style.border = "none";
+    textarea.style.outline = "none";
+    textarea.style.resize = "none";
+    textarea.style.padding = "0";
+    textarea.style.margin = "0";
+
+    textarea.focus();
+
+    const finish = () => {
+      const value = textarea.value.trim();
+
+      document.body.removeChild(textarea);
+
+      if (!value) return;
+
+      // create NEW text shape
+      const id = crypto.randomUUID();
+      const newShape = {
+        id,
+        name: "shape",
+        type: "text",
+        x: pos.x,
+        y: pos.y,
+        text: value,
+        fontSize: 24,
+        fill: "white",
+        draggable: true,
+        version: 1,
+        versionNonce: Math.random(),
+      };
+      setShapes((prev) => {
+        const filtered = prev.filter((s) => s.id !== id);
+        const next = [...filtered, newShape];
+        broadCasteShapeUpdate(next);
+        return next;
+      });
+    };
+
+    textarea.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        finish();
+      }
+      if (ev.key === "Escape") {
+        document.body.removeChild(textarea);
+      }
+    });
+
+    setTimeout(() =>
+      window.addEventListener("mousedown", finish, { once: true }),
+    );
+  };
   useEffect(() => {
     const key = getStorageKey(roomInfo?.roomId);
     const raw = localStorage.getItem(key);
@@ -282,14 +360,16 @@ ______________________________________*/
 
   useEffect(() => {
     if (pendingid.length === 0) return;
-    const node = pendingid.map((id) => shapeRef.current[id]);
-    if (node.length == 0) return;
-    trRef.current.nodes(node);
+
+    const nodes = pendingid.map((id) => shapeRef.current[id]).filter(Boolean); // <-- IMPORTANT
+
+    if (!nodes.length) return;
+
+    trRef.current.nodes(nodes);
     trRef.current.getLayer().batchDraw();
 
     setPendingid([]);
   }, [pendingid]);
-
   useEffect(() => {
     ActiveToolRef.current = ActiveTool;
   }, [ActiveTool]);
@@ -534,9 +614,6 @@ __________________________________________*/
     if (selectedNodes.length === 0) return;
 
     const ids = new Set(selectedNodes.map((node) => node.id()));
-    selectedNodes.forEach((node) => {
-      node.destroy(); // This removes from layer and cleans up
-    });
     setShapes((prev) => {
       const deleted = [];
       const updated = prev.map((s) => {
@@ -563,15 +640,15 @@ __________________________________________*/
 
   useEffect(() => {
     const down = (e) => {
-      if (e.key === "Delete") {
+      if (e.key === "Delete" || e.key === "Backspace") {
         isDeletePressed.current = true;
         handleDeleteShape();
       }
     };
     const up = (e) => {
-      if (e.key === "Delete") {
+      if (e.key === "Delete" || e.key === "Backspace") {
         isDeletePressed.current = false;
-        handleDeleteShape();
+        // handleDeleteShape();
       }
     };
 
@@ -586,7 +663,7 @@ __________________________________________*/
   /*___________________________________
 
  
-            Refs Register
+          Refs Register
  
 _____________________________________*/
 
@@ -599,9 +676,9 @@ _____________________________________*/
   };
   /* ________________________________
  
-    Transformer Handlers
-    
- _________________________________*/
+  Transformer Handlers
+  
+_________________________________*/
 
   const handleTransformPreview = () => {
     const nodes = trRef.current?.nodes();
@@ -695,8 +772,8 @@ _____________________________________*/
 
   /* ____________________________________________________________
 
-                    Handling Soft Delete-Shape 
-                    
+                  Handling Soft Delete-Shape 
+                  
 _______________________________________________________________*/
 
   useEffect(() => {
@@ -755,8 +832,8 @@ _______________________________________________________________*/
 
   /*________________________________________________
  
-            Handling Shape-Update While-Drawing 
-            
+          Handling Shape-Update While-Drawing 
+          
 _________________________________________________*/
 
   const handleUpdateShape = () => {
@@ -776,8 +853,8 @@ _________________________________________________*/
 
   /* ________________________________
 
-  KeyBoard Handling
-  
+KeyBoard Handling
+ 
 _________________________________*/
   useEffect(() => {
     const stage = stageRef.current;
@@ -847,7 +924,7 @@ _________________________________*/
 
   /* _____________________________________
 
-             Handling All MouseEvents 
+           Handling All MouseEvents 
 ________________________________________*/
 
   useEffect(() => {
@@ -1045,6 +1122,28 @@ ________________________________________*/
       if (!isDrawing.current || !previewNodeRef.current || ActiveTool === "")
         return;
 
+      if (ActiveTool === "selection") {
+        // Resize the selection rectangle as the user drags
+        handleRect(canvasPos, startPos.current.x, startPos.current.y);
+
+        // Hit-test which shapes are inside the selection box
+        const selectionBox = previewNodeRef.current;
+        const box = selectionBox.getClientRect();
+        const selectedNodes = layerRef.current
+          .find(".shape")
+          .filter((node) =>
+            Konva.Util.haveIntersection(box, node.getClientRect()),
+          );
+
+        // Use the same ref-based path that mouseUp uses so transformer attaches correctly
+        const ids = selectedNodes.map((n) => n.id());
+        const nodes = ids.map((id) => shapeRef.current[id]).filter(Boolean);
+        trRef.current.nodes(nodes);
+        trRef.current.getLayer()?.batchDraw();
+
+        layerRef.current.batchDraw();
+        return;
+      }
       if (ActiveTool === "eraser" && isErasingRef.current) {
         previewNodeRef.current.setAttrs({ x: canvasPos.x, y: canvasPos.y });
 
@@ -1115,12 +1214,7 @@ ________________________________________*/
         });
 
         const ids = new Set(erasedIdsRef.current);
-        ids.forEach((id) => {
-          const node = shapeRef.current[id];
-          if (node) {
-            node.destroy(); // ← ADD THIS!
-          }
-        });
+
         setShapes((prev) => {
           const updated = prev.map((s) =>
             ids.has(s.id) ? { ...s, deleted: true, version: s.version + 1 } : s,
@@ -1128,6 +1222,7 @@ ________________________________________*/
           broadCasteShapeUpdate(updated.filter((s) => ids.has(s.id)));
           return updated;
         });
+
         trRef.current.nodes([]);
         trRef.current.getLayer()?.batchDraw();
 
@@ -1165,11 +1260,11 @@ ________________________________________*/
 
       const attrs = previewNodeRef.current.getAttrs();
       const id = currentDrawingIdRef.current;
-      const Name = "shape";
+      const name = "shape";
       const newShape = {
         ...attrs,
         id,
-        Name,
+        name,
         type: ActiveTool,
         draggable: false,
         listening: true,
@@ -1302,7 +1397,7 @@ ________________________________________*/
   };
   /*___________________________________
  
-    Rendering Canvas & Drawing
+  Rendering Canvas & Drawing
 _____________________________________*/
   return (
     <div
@@ -1403,6 +1498,7 @@ _____________________________________*/
         x={stagePosition.x}
         y={stagePosition.y}
         draggable={false}
+        onDblClick={handleDblClick}
       >
         <Layer ref={layerRef}>
           {Shapes.filter((s) => !s.deleted).map((shape) => {
@@ -1432,9 +1528,15 @@ _____________________________________*/
           />
           {Array.from(remoteCursors.entries()).map(([id, cursor]) => {
             const color = getCursorColor(id);
-
             return (
-              <Group key={id} x={cursor.x} y={cursor.y} listening={false}>
+              <Group
+                key={id}
+                x={cursor.x}
+                y={cursor.y}
+                scaleX={1 / stageScale}
+                scaleY={1 / stageScale}
+                listening={false}
+              >
                 <Arrow
                   points={[0, 10, 1, 1]} // almost no line
                   pointerLength={16}

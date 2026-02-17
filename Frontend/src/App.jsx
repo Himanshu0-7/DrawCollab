@@ -5,12 +5,16 @@ import Canvas from "./Canvas";
 import EraserCursor from "./EraserCursor";
 import "./Shared.css";
 const adjectives = [
-  "Blue", "Neon", "Silent", "Swift", "Pixel", "Cosmic", "Fuzzy",
+  "Blue",
+  "Neon",
+  "Silent",
+  "Swift",
+  "Pixel",
+  "Cosmic",
+  "Fuzzy",
 ];
 
-const animals = [
-  "Panda", "Fox", "Tiger", "Owl", "Wolf", "Koala", "Hawk",
-];
+const animals = ["Panda", "Fox", "Tiger", "Owl", "Wolf", "Koala", "Hawk"];
 
 function generateUsername() {
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
@@ -25,8 +29,8 @@ function App() {
   const [pointerEvent, setPointerEvent] = useState("");
   const [roomInfo, setRoomInfo] = useState(null);
   const [encryptionKey, setEncrptionKey] = useState(null);
-  const [userName, setUserName] = useState('');
-  const [sessionStatus, setSessionStatus] = useState(false)
+  const [userName, setUserName] = useState("");
+  const [sessionStatus, setSessionStatus] = useState(false);
   const fileRef = useRef(null);
   const handleStartSession = () => {
     if (!userName) {
@@ -39,27 +43,33 @@ function App() {
   const handleUploadClick = () => {
     fileRef.current.click();
   };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const url = URL.createObjectURL(file);
+    const reader = new FileReader();
 
-    const img = new window.Image();
-    img.src = url;
+    reader.onload = () => {
+      const base64 = reader.result;
 
-    img.onload = () => {
-      setActiveTool({
-        type: "image",
-        payload: {
-          src: url,
-          width: img.width,
-          height: img.height,
-        },
-      });
+      const img = new window.Image();
+      img.src = base64;
+
+      img.onload = () => {
+        setActiveTool({
+          type: "image",
+          payload: {
+            src: base64,
+            width: img.width,
+            height: img.height,
+          },
+        });
+      };
     };
-  };
 
+    reader.readAsDataURL(file);
+  };
 
   const shareBtn = () => {
     setIshare((prev) => (prev === 0 ? 1 : 0));
@@ -78,19 +88,19 @@ function App() {
       if (!roomId || !key) {
         setRoomInfo(null);
         setEncrptionKey(null);
-        setSessionStatus(sessionStatus)
+        setSessionStatus(sessionStatus);
         return;
       }
       setRoomInfo({ roomId, key });
 
-      setUserName(generateUsername())
+      setUserName(generateUsername());
       setEncrptionKey({
         kty: "oct",
         k: key,
         alg: "A128GCM",
         ext: true,
       });
-      setSessionStatus(true)
+      setSessionStatus(true);
     };
     parseHash();
     window.addEventListener("hashchange", parseHash);

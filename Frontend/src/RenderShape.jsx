@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Arrow, Ellipse, Image, Line, Rect } from "react-konva";
+import { Arrow, Ellipse, Image, Line, Rect, Text } from "react-konva";
 
 const RenderShape = ({
   shape,
@@ -25,15 +25,11 @@ const RenderShape = ({
     };
   }, [shape.src]);
 
-  if (shape.deleted) {
-    return null;
-  }
-
   const commonProps = {
     ref: (node) => RegisterRef(shape.id, node),
     listening: canInteract,
     draggable: false,
-    onclick: (e) => {
+    onClick: (e) => {
       if (!canInteract) {
         e.cancelBubble = true;
         return;
@@ -60,10 +56,13 @@ const RenderShape = ({
 
     case "pencil":
       return <Line {...shape} {...commonProps} stroke="white" />;
+    case "text":
+      return <Text {...shape} {...commonProps} />;
 
     case "image":
       return (
         <Image
+          {...shape}
           {...commonProps}
           ref={(node) => {
             imageRef.current = node;
@@ -72,7 +71,6 @@ const RenderShape = ({
           image={imgElement}
           x={shape.x}
           y={shape.y}
-          name="shape"
           width={shape.width}
           height={shape.height}
         />
