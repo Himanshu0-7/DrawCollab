@@ -21,6 +21,7 @@ const Canvas = ({
   pointerEvent,
   setUserName,
   userName,
+  setLoading,
 }) => {
   // ______________________________________
   //
@@ -539,7 +540,7 @@ ______________________________________*/
   };
 
   const handleWebsocketMessgae = (type, decryptedPayload) => {
-    // console.log("RECEIVED TYPE:", type, decryptedPayload);
+    console.log("RECEIVED TYPE:", type, decryptedPayload);
     switch (type) {
       case "SCENE_UPDATE":
         handleRemoteSceneUpdate(decryptedPayload);
@@ -572,10 +573,25 @@ ______________________________________*/
     const ws = new WebSocket(`${WS_URL}/ws?room=${roomInfo.roomId}`);
 
     ws.binaryType = "arraybuffer";
-    ws.onopen = () => {
+    ws.onopen = async () => {
+      // const encryptedBlob = await encryptData(JSON.stringify({ userName }));
+      // const frame = buildFrame({
+      //   type: "USER_JOINED",
+      //   encryptedData: encryptedBlob,
+      // });
+      // ws.send(frame);
       console.log("ws connected to roomid", roomInfo.roomId);
+      setLoading(false);
     };
     ws.onmessage = async (e) => {
+      // if (typeof e.data === "string") {
+      //   const { type, isExisting } = JSON.parse(e.data);
+      //   if (type === "ROOM_INFO") {
+      //     setLoading(isExisting); // true = joining, false = creating
+      //   }
+      //   return;
+      // }
+      //
       const { type, decryptedPayload } = await decodeAndDecryptFrame(
         e.data,
         cryptoKey,

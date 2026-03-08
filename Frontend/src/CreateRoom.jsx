@@ -5,6 +5,7 @@ export function CreateRoom({
   onStartSession,
   sessionStatus,
   setSessionStatus,
+  isHostRef,
 }) {
   const roomIdRef = useRef(crypto.randomUUID());
 
@@ -16,6 +17,7 @@ export function CreateRoom({
 
   const startSession = async () => {
     onStartSession();
+    isHostRef.current = true;
     const cryptoKey = await window.crypto.subtle.generateKey(
       {
         name: "AES-GCM",
@@ -29,7 +31,6 @@ export function CreateRoom({
     window.location.hash = `#room=${roomIdRef.current},${jwk.k}`;
     setEncrptionKey(jwk);
     setSessionStatus(true);
-
     // exporting webkey to jwk
   };
   const stopSession = () => {

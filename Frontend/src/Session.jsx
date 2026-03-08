@@ -11,6 +11,7 @@ const Session = ({
   onStartSession,
   sessionStatus,
   setSessionStatus,
+  isHostRef,
 }) => {
   const roomUrl = window.location.href;
   useEffect(() => {
@@ -72,6 +73,7 @@ const Session = ({
             onStartSession={onStartSession}
             sessionStatus={sessionStatus}
             setSessionStatus={setSessionStatus}
+            isHostRef={isHostRef}
           ></CreateRoom>
         </section>
       </div>

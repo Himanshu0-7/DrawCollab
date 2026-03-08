@@ -74,7 +74,12 @@ module.exports = function setupWebSocket(server) {
     if (ws.roomId && rooms.has(ws.roomId)) {
       const room = rooms.get(ws.roomId);
       room.clients.add(ws);
-
+      ws.send(
+        JSON.stringify({
+          type: "ROOM_INFO",
+          isExisting: room.clients.size > 1,
+        }),
+      );
       // 🔹 Notify others in the room
       // ws.send(
       //   JSON.stringify({

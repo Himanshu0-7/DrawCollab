@@ -4,6 +4,7 @@ import Session from "./Session";
 import Canvas from "./Canvas";
 import EraserCursor from "./EraserCursor";
 import "./Shared.css";
+import { PreLoader } from "./PreLoader";
 const adjectives = [
   "Blue",
   "Neon",
@@ -23,6 +24,7 @@ function generateUsername() {
   return `${adj} ${animal} ${num}`;
 }
 function App() {
+  const [loading, setLoading] = useState(false);
   const [isshare, setIshare] = useState(0);
   const [ActiveTool, setActiveTool] = useState("selection");
   const [isEraserEnable, setIsEraserEnable] = useState(false);
@@ -31,6 +33,7 @@ function App() {
   const [encryptionKey, setEncrptionKey] = useState(null);
   const [userName, setUserName] = useState("");
   const [sessionStatus, setSessionStatus] = useState(false);
+  const isHostRef = useRef(false);
   const fileRef = useRef(null);
   const handleStartSession = () => {
     if (!userName) {
@@ -100,6 +103,9 @@ function App() {
         alg: "A128GCM",
         ext: true,
       });
+      if (!isHostRef.current) {
+        setLoading(true);
+      }
       setSessionStatus(true);
     };
     parseHash();
@@ -130,7 +136,9 @@ function App() {
         encryptionKey={encryptionKey}
         setUserName={setUserName}
         userName={userName}
+        setLoading={setLoading}
       ></Canvas>
+      {loading && <PreLoader />}
       <Session
         isloading={isshare}
         roomInfo={roomInfo}
@@ -140,6 +148,7 @@ function App() {
         onStartSession={handleStartSession}
         sessionStatus={sessionStatus}
         setSessionStatus={setSessionStatus}
+        isHostRef={isHostRef}
       ></Session>
     </>
   );
